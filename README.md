@@ -37,7 +37,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:opex, path: "opex"}  # Or publish to Hex
+    {:opex, "~> 0.1.0"}
   ]
 end
 ```
