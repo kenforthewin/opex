@@ -197,11 +197,12 @@ defmodule OpEx.MCP.HttpClient do
     }
 
     # Add Execution-Id header if we have one
-    extra_headers = if state.execution_id do
-      [{"Execution-Id", state.execution_id}]
-    else
-      []
-    end
+    extra_headers =
+      if state.execution_id do
+        [{"Execution-Id", state.execution_id}]
+      else
+        []
+      end
 
     Logger.debug("Calling tool #{tool_name} on HTTP MCP server")
 
@@ -215,11 +216,13 @@ defmodule OpEx.MCP.HttpClient do
             case get_in(result, ["isError"]) do
               true ->
                 # Extract error message from content
-                error_message = case get_in(result, ["content"]) do
-                  [%{"text" => text} | _] -> text
-                  content when is_binary(content) -> content
-                  _ -> "Tool execution failed"
-                end
+                error_message =
+                  case get_in(result, ["content"]) do
+                    [%{"text" => text} | _] -> text
+                    content when is_binary(content) -> content
+                    _ -> "Tool execution failed"
+                  end
+
                 {:reply, {:error, error_message}, state}
 
               _ ->
@@ -256,30 +259,33 @@ defmodule OpEx.MCP.HttpClient do
     ]
 
     # Add session ID if we have one
-    session_headers = if state.session_id do
-      [{"Mcp-Session-Id", state.session_id}]
-    else
-      []
-    end
+    session_headers =
+      if state.session_id do
+        [{"Mcp-Session-Id", state.session_id}]
+      else
+        []
+      end
 
     all_headers = base_headers ++ session_headers ++ extra_headers
 
     Logger.debug("Sending HTTP MCP request: #{inspect(json_rpc_request)}")
 
     case Req.post(state.req_client,
-      json: json_rpc_request,
-      headers: all_headers
-    ) do
+           json: json_rpc_request,
+           headers: all_headers
+         ) do
       {:ok, %{status: 200, body: body, headers: headers}} ->
         Logger.debug("Received 200 OK response")
 
         # Handle SSE format if body is a string starting with "event:"
-        parsed_body = case body do
-          "event: " <> _ = sse_data ->
-            parse_sse_response(sse_data)
-          _ ->
-            body
-        end
+        parsed_body =
+          case body do
+            "event: " <> _ = sse_data ->
+              parse_sse_response(sse_data)
+
+            _ ->
+              body
+          end
 
         {:ok, parsed_body, headers}
 
@@ -306,20 +312,21 @@ defmodule OpEx.MCP.HttpClient do
     ]
 
     # Add session ID if we have one
-    session_headers = if state.session_id do
-      [{"Mcp-Session-Id", state.session_id}]
-    else
-      []
-    end
+    session_headers =
+      if state.session_id do
+        [{"Mcp-Session-Id", state.session_id}]
+      else
+        []
+      end
 
     all_headers = base_headers ++ session_headers
 
     Logger.debug("Sending HTTP MCP notification: #{inspect(notification)}")
 
     case Req.post(state.req_client,
-      json: notification,
-      headers: all_headers
-    ) do
+           json: notification,
+           headers: all_headers
+         ) do
       {:ok, %{status: 202}} ->
         Logger.debug("Notification accepted (202)")
         :ok
@@ -364,8 +371,10 @@ defmodule OpEx.MCP.HttpClient do
     end)
     |> case do
       {:ok, parsed} -> parsed
-      nil -> %{}  # Return empty map if no data line found
-      {:error, _} -> %{}  # Return empty map if JSON parsing failed
+      # Return empty map if no data line found
+      nil -> %{}
+      # Return empty map if JSON parsing failed
+      {:error, _} -> %{}
     end
   end
 

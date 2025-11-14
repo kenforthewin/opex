@@ -20,12 +20,14 @@ defmodule OpEx.MCP.StdioClientTest do
       env = [{"API_KEY", "test-key"}, {"DEBUG", "true"}]
 
       # Test conversion to charlists
-      env_charlists = Enum.map(env, fn
-        {key, value} when is_binary(key) and is_binary(value) ->
-          {String.to_charlist(key), String.to_charlist(value)}
-        {key, value} ->
-          {key, value}
-      end)
+      env_charlists =
+        Enum.map(env, fn
+          {key, value} when is_binary(key) and is_binary(value) ->
+            {String.to_charlist(key), String.to_charlist(value)}
+
+          {key, value} ->
+            {key, value}
+        end)
 
       assert length(env_charlists) == 2
       assert {~c"API_KEY", ~c"test-key"} = hd(env_charlists)
@@ -61,7 +63,8 @@ defmodule OpEx.MCP.StdioClientTest do
       }
 
       assert notification["method"] == "notifications/initialized"
-      refute Map.has_key?(notification, "id")  # Notifications don't have IDs
+      # Notifications don't have IDs
+      refute Map.has_key?(notification, "id")
     end
 
     test "extracts session ID from response" do
@@ -252,10 +255,12 @@ defmodule OpEx.MCP.StdioClientTest do
       error_result = MCPHelpers.mcp_result([%{"text" => "File not found"}], true)
 
       content = get_in(error_result, ["content"])
-      error_message = case content do
-        [%{"text" => text} | _] -> text
-        _ -> "Unknown error"
-      end
+
+      error_message =
+        case content do
+          [%{"text" => text} | _] -> text
+          _ -> "Unknown error"
+        end
 
       assert error_message == "File not found"
     end
@@ -297,6 +302,7 @@ defmodule OpEx.MCP.StdioClientTest do
           {:ok, response} -> {:ok, response}
           {:error, _reason} -> {:error, :invalid_json}
         end
+
       _ ->
         # Log message, would continue collecting
         {:continue, ""}

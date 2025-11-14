@@ -30,11 +30,12 @@ defmodule OpEx.Client do
       |> Req.Request.put_header("Authorization", "Bearer #{api_key}")
       |> Req.Request.put_header("User-Agent", user_agent)
 
-    req = if app_title do
-      Req.Request.put_header(req, "X-Title", app_title)
-    else
-      req
-    end
+    req =
+      if app_title do
+        Req.Request.put_header(req, "X-Title", app_title)
+      else
+        req
+      end
 
     %__MODULE__{req: req}
   end
@@ -46,12 +47,14 @@ defmodule OpEx.Client do
   def get_models(%__MODULE__{} = client) do
     case request(client, :get, "/models") do
       {:ok, %{"data" => models}} ->
-        formatted_models = Enum.map(models, fn model ->
-          %{
-            id: model["id"],
-            name: model["name"] || model["id"]
-          }
-        end)
+        formatted_models =
+          Enum.map(models, fn model ->
+            %{
+              id: model["id"],
+              name: model["name"] || model["id"]
+            }
+          end)
+
         {:ok, formatted_models}
 
       {:ok, unexpected} ->
@@ -88,9 +91,11 @@ defmodule OpEx.Client do
             {:error, converted_error} ->
               Logger.info("Found embedded error, converting for retry: #{inspect(converted_error)}")
               {:error, converted_error}
+
             :ok ->
               {:ok, response_body}
           end
+
         error ->
           error
       end
@@ -126,10 +131,12 @@ defmodule OpEx.Client do
     error_message = get_in(error_info, ["message"])
 
     # Handle specific error code mappings for rate limits
-    final_status = case error_code do
-      502 -> 429  # Rate limit from OpenAI reported as 502, treat as 429
-      code -> code
-    end
+    final_status =
+      case error_code do
+        # Rate limit from OpenAI reported as 502, treat as 429
+        502 -> 429
+        code -> code
+      end
 
     # Convert to the format expected by retry logic
     {:error, %{status: final_status, body: %{error: %{message: error_message}}}}
@@ -171,25 +178,35 @@ defmodule OpEx.Client do
         %Req.TransportError{reason: reason} when reason in [:closed, :timeout, :econnrefused, :nxdomain] ->
           if attempt <= max_retries do
             delay_ms = calculate_transport_backoff_delay(reason, attempt)
-            Logger.warning("Transport error (#{reason}), retrying attempt #{attempt}/#{max_retries} after #{delay_ms}ms...")
+
+            Logger.warning(
+              "Transport error (#{reason}), retrying attempt #{attempt}/#{max_retries} after #{delay_ms}ms..."
+            )
+
             Process.sleep(delay_ms)
             retry_on_transient_error(fun, attempt + 1, max_retries)
           else
             Logger.error("Max retries (#{max_retries}) exceeded for transport error: #{reason}")
             {:error, error}
           end
+
         _ ->
           reraise error, __STACKTRACE__
       end
+
     other_error ->
       reraise other_error, __STACKTRACE__
   end
 
   defp calculate_backoff_delay(status, attempt) do
-    base_delay = case status do
-      429 -> 5000  # Rate limits: start with 5 seconds
-      _ -> 2000    # Server errors: start with 2 seconds
-    end
+    base_delay =
+      case status do
+        # Rate limits: start with 5 seconds
+        429 -> 5000
+        # Server errors: start with 2 seconds
+        _ -> 2000
+      end
+
     (:math.pow(2, attempt - 1) * base_delay) |> round()
   end
 

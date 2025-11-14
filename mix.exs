@@ -9,7 +9,17 @@ defmodule OpEx.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: description(),
-      package: package()
+      package: package(),
+
+      # Hex.pm metadata
+      source_url: "https://github.com/kenforthewin/opex",
+      homepage_url: "https://github.com/kenforthewin/opex",
+
+      # Documentation
+      docs: [
+        main: "OpEx",
+        extras: ["README.md", "CHANGELOG.md"]
+      ]
     ]
   end
 
@@ -22,7 +32,10 @@ defmodule OpEx.MixProject do
   defp deps do
     [
       {:req, "~> 0.5.0"},
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+
+      # Dev dependencies
+      {:ex_doc, "~> 0.31", only: :dev, runtime: false}
     ]
   end
 
@@ -37,7 +50,12 @@ defmodule OpEx.MixProject do
     [
       name: "opex",
       licenses: ["MIT"],
-      links: %{}
+      maintainers: ["Kenneth Bergquist"],
+      links: %{
+        "GitHub" => "https://github.com/kenforthewin/opex",
+        "Changelog" => "https://github.com/kenforthewin/opex/blob/main/CHANGELOG.md"
+      },
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 end

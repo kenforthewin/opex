@@ -4,14 +4,15 @@ defmodule OpEx.MCP.ToolsTest do
 
   describe "convert_to_openai_format/1" do
     test "converts MCP tool to OpenAI format with all fields" do
-      mcp_tool = MCPHelpers.mcp_tool(
-        "read_file",
-        "Read a file from filesystem",
-        %{
-          "path" => %{"type" => "string", "description" => "File path"}
-        },
-        ["path"]
-      )
+      mcp_tool =
+        MCPHelpers.mcp_tool(
+          "read_file",
+          "Read a file from filesystem",
+          %{
+            "path" => %{"type" => "string", "description" => "File path"}
+          },
+          ["path"]
+        )
 
       result = OpEx.MCP.Tools.convert_to_openai_format(mcp_tool)
 
@@ -39,19 +40,20 @@ defmodule OpEx.MCP.ToolsTest do
     end
 
     test "preserves complex nested properties" do
-      mcp_tool = MCPHelpers.mcp_tool(
-        "complex_tool",
-        "Complex tool",
-        %{
-          "config" => %{
-            "type" => "object",
-            "properties" => %{
-              "nested" => %{"type" => "string"}
+      mcp_tool =
+        MCPHelpers.mcp_tool(
+          "complex_tool",
+          "Complex tool",
+          %{
+            "config" => %{
+              "type" => "object",
+              "properties" => %{
+                "nested" => %{"type" => "string"}
+              }
             }
-          }
-        },
-        []
-      )
+          },
+          []
+        )
 
       result = OpEx.MCP.Tools.convert_to_openai_format(mcp_tool)
 
@@ -100,7 +102,7 @@ defmodule OpEx.MCP.ToolsTest do
       tool_call = MCPHelpers.tool_call("call_123", "search", %{"query" => "test"})
 
       assert {:ok, "search", %{"query" => "test"}} =
-        OpEx.MCP.Tools.extract_tool_call(tool_call)
+               OpEx.MCP.Tools.extract_tool_call(tool_call)
     end
 
     test "handles empty arguments string" do
@@ -113,7 +115,7 @@ defmodule OpEx.MCP.ToolsTest do
       }
 
       assert {:ok, "no_args_tool", %{}} =
-        OpEx.MCP.Tools.extract_tool_call(tool_call)
+               OpEx.MCP.Tools.extract_tool_call(tool_call)
     end
 
     test "returns error for invalid JSON in arguments" do
@@ -126,7 +128,7 @@ defmodule OpEx.MCP.ToolsTest do
       }
 
       assert {:error, :invalid_arguments} =
-        OpEx.MCP.Tools.extract_tool_call(tool_call)
+               OpEx.MCP.Tools.extract_tool_call(tool_call)
     end
 
     test "handles complex nested arguments" do
@@ -134,7 +136,7 @@ defmodule OpEx.MCP.ToolsTest do
       tool_call = MCPHelpers.tool_call("call_123", "complex", args)
 
       assert {:ok, "complex", result_args} =
-        OpEx.MCP.Tools.extract_tool_call(tool_call)
+               OpEx.MCP.Tools.extract_tool_call(tool_call)
 
       assert get_in(result_args, ["config", "nested", "deep"]) == "value"
     end

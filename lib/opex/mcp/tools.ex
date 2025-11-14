@@ -100,18 +100,19 @@ defmodule OpEx.MCP.Tools do
   Formats MCP tool result for OpenAI tool response.
   """
   def format_tool_result(tool_call_id, mcp_result) do
-    content = case mcp_result do
-      %{"content" => content} when is_list(content) ->
-        content
-        |> Enum.map(&extract_content_text/1)
-        |> Enum.join("\n")
+    content =
+      case mcp_result do
+        %{"content" => content} when is_list(content) ->
+          content
+          |> Enum.map(&extract_content_text/1)
+          |> Enum.join("\n")
 
-      %{"content" => content} when is_binary(content) ->
-        content
+        %{"content" => content} when is_binary(content) ->
+          content
 
-      other ->
-        Jason.encode!(other)
-    end
+        other ->
+          Jason.encode!(other)
+      end
 
     %{
       "role" => "tool",

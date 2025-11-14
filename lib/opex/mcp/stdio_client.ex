@@ -98,6 +98,7 @@ defmodule OpEx.MCP.StdioClient do
     case send_mcp_request(state.port, request) do
       {:ok, response} ->
         Logger.debug("Received tools/list response: #{inspect(response)}")
+
         case Map.get(response, "error") do
           nil ->
             tools = get_in(response, ["result", "tools"]) || []
@@ -124,14 +125,14 @@ defmodule OpEx.MCP.StdioClient do
   @impl true
   def handle_call({:call_tool, tool_name, args}, _from, %{status: :connected} = state) do
     case send_mcp_request(state.port, %{
-      "jsonrpc" => "2.0",
-      "id" => generate_id(),
-      "method" => "tools/call",
-      "params" => %{
-        "name" => tool_name,
-        "arguments" => args
-      }
-    }) do
+           "jsonrpc" => "2.0",
+           "id" => generate_id(),
+           "method" => "tools/call",
+           "params" => %{
+             "name" => tool_name,
+             "arguments" => args
+           }
+         }) do
       {:ok, response} ->
         case Map.get(response, "error") do
           nil ->
@@ -140,11 +141,13 @@ defmodule OpEx.MCP.StdioClient do
             case get_in(result, ["isError"]) do
               true ->
                 # Extract error message from content
-                error_message = case get_in(result, ["content"]) do
-                  [%{"text" => text} | _] -> text
-                  content when is_binary(content) -> content
-                  _ -> "Tool execution failed"
-                end
+                error_message =
+                  case get_in(result, ["content"]) do
+                    [%{"text" => text} | _] -> text
+                    content when is_binary(content) -> content
+                    _ -> "Tool execution failed"
+                  end
+
                 {:reply, {:error, error_message}, state}
 
               _ ->
@@ -167,6 +170,7 @@ defmodule OpEx.MCP.StdioClient do
           :invalid_json ->
             new_state = %{state | status: :disconnected}
             {:reply, {:error, :server_crashed}, new_state}
+
           _ ->
             {:reply, {:error, reason}, state}
         end
@@ -223,9 +227,11 @@ defmodule OpEx.MCP.StdioClient do
     case Port.info(port) do
       nil ->
         :ok
+
       _ ->
         Port.close(port)
     end
+
     :ok
   end
 
@@ -239,23 +245,30 @@ defmodule OpEx.MCP.StdioClient do
     env = config["env"] || []
 
     # Convert env tuples from {String, String} to {charlist, charlist} for Port.open
-    env_charlists = Enum.map(env, fn
-      {key, value} when is_binary(key) and is_binary(value) ->
-        {String.to_charlist(key), String.to_charlist(value)}
-      {key, value} ->
-        {key, value}
-    end)
+    env_charlists =
+      Enum.map(env, fn
+        {key, value} when is_binary(key) and is_binary(value) ->
+          {String.to_charlist(key), String.to_charlist(value)}
+
+        {key, value} ->
+          {key, value}
+      end)
 
     port_opts = [
       :binary,
       :exit_status,
-      {:line, 8192},  # Increased line buffer size
+      # Increased line buffer size
+      {:line, 8192},
       {:env, env_charlists}
     ]
 
     try do
-      port = Port.open({:spawn_executable, System.find_executable(command)},
-                      [{:args, args} | port_opts])
+      port =
+        Port.open(
+          {:spawn_executable, System.find_executable(command)},
+          [{:args, args} | port_opts]
+        )
+
       {:ok, port}
     rescue
       error ->
@@ -328,7 +341,9 @@ defmodule OpEx.MCP.StdioClient do
         case String.trim(complete_data) do
           "{" <> _ = json_data ->
             case Jason.decode(json_data) do
-              {:ok, response} -> {:ok, response}
+              {:ok, response} ->
+                {:ok, response}
+
               {:error, reason} ->
                 Logger.warning("Failed to decode JSON (EOL): #{inspect(json_data)}, reason: #{inspect(reason)}")
                 {:error, :invalid_json}
@@ -352,7 +367,9 @@ defmodule OpEx.MCP.StdioClient do
         case String.trim(complete_data) do
           "{" <> _ = json_data ->
             case Jason.decode(json_data) do
-              {:ok, response} -> {:ok, response}
+              {:ok, response} ->
+                {:ok, response}
+
               {:error, reason} ->
                 Logger.warning("Failed to decode JSON (binary): #{inspect(json_data)}, reason: #{inspect(reason)}")
                 {:error, :invalid_json}

@@ -55,6 +55,7 @@ defmodule OpEx.Test.MCPHelpers do
   """
   def mcp_result(content, is_error \\ false) do
     base = %{"content" => content}
+
     if is_error do
       Map.put(base, "isError", true)
     else
@@ -141,16 +142,17 @@ defmodule OpEx.Test.MCPHelpers do
       "content" => content
     }
 
-    message = if tool_calls != [] do
-      Map.put(message, "tool_calls", tool_calls)
-    else
-      message
-    end
+    message =
+      if tool_calls != [] do
+        Map.put(message, "tool_calls", tool_calls)
+      else
+        message
+      end
 
     %{
       "id" => "chatcmpl-123",
       "object" => "chat.completion",
-      "created" => 1234567890,
+      "created" => 1_234_567_890,
       "model" => "anthropic/claude-3.5-sonnet",
       "choices" => [
         %{
@@ -182,7 +184,7 @@ defmodule OpEx.Test.MCPHelpers do
     %{
       "id" => "chatcmpl-123",
       "object" => "chat.completion",
-      "created" => 1234567890,
+      "created" => 1_234_567_890,
       "model" => "anthropic/claude-3.5-sonnet",
       "choices" => [
         %{

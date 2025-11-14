@@ -9,7 +9,8 @@ defmodule OpEx.MCP.SessionManager do
 
   defstruct [:sessions, :configs, :health_check_interval]
 
-  @default_health_check_interval 300_000  # 5 minutes
+  # 5 minutes
+  @default_health_check_interval 300_000
 
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, __MODULE__)
@@ -82,13 +83,14 @@ defmodule OpEx.MCP.SessionManager do
 
     case start_mcp_client(server_config) do
       {:ok, pid, client_module} ->
-        new_sessions = Map.put(state.sessions, server_id, %{
-          pid: pid,
-          client_module: client_module,
-          status: :connected,
-          tools: [],
-          last_health_check: System.monotonic_time(:millisecond)
-        })
+        new_sessions =
+          Map.put(state.sessions, server_id, %{
+            pid: pid,
+            client_module: client_module,
+            status: :connected,
+            tools: [],
+            last_health_check: System.monotonic_time(:millisecond)
+          })
 
         new_configs = Map.put(state.configs, server_id, server_config)
 
@@ -179,7 +181,7 @@ defmodule OpEx.MCP.SessionManager do
       state.sessions
       |> Enum.filter(fn {_id, session} ->
         session.status == :connected &&
-        Enum.any?(session.tools, fn tool -> tool["name"] == tool_name end)
+          Enum.any?(session.tools, fn tool -> tool["name"] == tool_name end)
       end)
 
     # If no sessions have this tool, return error immediately
@@ -192,9 +194,11 @@ defmodule OpEx.MCP.SessionManager do
           case session.client_module.call_tool(session.pid, tool_name, args) do
             {:ok, result} ->
               {:halt, {{:ok, result}, acc_sessions}}
+
             {:error, :tool_not_found} ->
               # This shouldn't happen since we filtered, but handle it anyway
               {:cont, {nil, acc_sessions}}
+
             {:error, :server_crashed} ->
               # Server crashed, mark as disconnected and attempt immediate recovery
               Logger.warning("MCP server crashed during tool call, attempting immediate recovery")
@@ -204,7 +208,13 @@ defmodule OpEx.MCP.SessionManager do
               # Attempt immediate reconnection
               case attempt_reconnection(id, state.configs[id]) do
                 {:ok, new_pid, client_module} ->
-                  recovered_session = %{updated_session | pid: new_pid, client_module: client_module, status: :connected}
+                  recovered_session = %{
+                    updated_session
+                    | pid: new_pid,
+                      client_module: client_module,
+                      status: :connected
+                  }
+
                   final_sessions = Map.put(new_sessions, id, recovered_session)
 
                   # Retry the tool call on the recovered session
@@ -276,18 +286,23 @@ defmodule OpEx.MCP.SessionManager do
 
   defp start_mcp_client(server_config) do
     # Determine client type from config
-    {client_module, config} = case server_config do
-      %{"url" => _} ->
-        {OpEx.MCP.HttpClient, server_config}
-      _ ->
-        {OpEx.MCP.StdioClient, server_config}
-    end
+    {client_module, config} =
+      case server_config do
+        %{"url" => _} ->
+          {OpEx.MCP.HttpClient, server_config}
+
+        _ ->
+          {OpEx.MCP.StdioClient, server_config}
+      end
 
     case client_module.start_link(config) do
       {:ok, pid} ->
         Process.monitor(pid)
+
         case client_module.connect(pid) do
-          :ok -> {:ok, pid, client_module}
+          :ok ->
+            {:ok, pid, client_module}
+
           {:error, reason} ->
             client_module.stop(pid)
             {:error, reason}
@@ -302,6 +317,7 @@ defmodule OpEx.MCP.SessionManager do
     # Normalize config for JSON encoding (convert env tuples to lists)
     normalized_config = normalize_config_for_json(server_config)
     config_string = Jason.encode!(normalized_config)
+
     :crypto.hash(:sha256, config_string)
     |> Base.encode16(case: :lower)
     |> String.slice(0, 8)
@@ -322,6 +338,7 @@ defmodule OpEx.MCP.SessionManager do
     {updated_sessions, health_status} =
       Enum.reduce(sessions, {%{}, %{}}, fn {id, session}, {acc_sessions, acc_health} ->
         {updated_session, health} = check_session_health(session, configs[id], current_time)
+
         {
           Map.put(acc_sessions, id, updated_session),
           Map.put(acc_health, id, health)
@@ -331,22 +348,19 @@ defmodule OpEx.MCP.SessionManager do
     {updated_sessions, health_status}
   end
 
-  defp check_session_health(%{status: :connected, pid: pid, client_module: client_module} = session, _config, current_time) do
+  defp check_session_health(
+         %{status: :connected, pid: pid, client_module: client_module} = session,
+         _config,
+         current_time
+       ) do
     case client_module.list_tools(pid) do
       {:ok, tools} ->
-        updated_session = %{session |
-          tools: tools,
-          last_health_check: current_time,
-          status: :connected
-        }
+        updated_session = %{session | tools: tools, last_health_check: current_time, status: :connected}
         {updated_session, :healthy}
 
       {:error, reason} ->
         Logger.warning("Health check failed for MCP session: #{inspect(reason)}")
-        updated_session = %{session |
-          status: :disconnected,
-          last_health_check: current_time
-        }
+        updated_session = %{session | status: :disconnected, last_health_check: current_time}
         {updated_session, :unhealthy}
     end
   end
@@ -355,12 +369,14 @@ defmodule OpEx.MCP.SessionManager do
     # Attempt to reconnect
     case start_mcp_client(config) do
       {:ok, pid, client_module} ->
-        updated_session = %{session |
-          pid: pid,
-          client_module: client_module,
-          status: :connected,
-          last_health_check: current_time
+        updated_session = %{
+          session
+          | pid: pid,
+            client_module: client_module,
+            status: :connected,
+            last_health_check: current_time
         }
+
         {updated_session, :reconnected}
 
       {:error, _reason} ->

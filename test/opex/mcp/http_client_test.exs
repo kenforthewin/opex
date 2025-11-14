@@ -26,16 +26,19 @@ defmodule OpEx.MCP.HttpClientTest do
 
     test "rejects config without required fields" do
       invalid_configs = [
-        %{"url" => "https://api.example.com"},  # Missing auth_token
-        %{"auth_token" => "token"},             # Missing url
-        %{}                                      # Missing both
+        # Missing auth_token
+        %{"url" => "https://api.example.com"},
+        # Missing url
+        %{"auth_token" => "token"},
+        # Missing both
+        %{}
       ]
 
       for config <- invalid_configs do
         has_url = Map.has_key?(config, "url") and config["url"] != nil
         has_token = Map.has_key?(config, "auth_token") and config["auth_token"] != nil
 
-        refute (has_url and has_token), "Config should be invalid"
+        refute has_url and has_token, "Config should be invalid"
       end
     end
   end
@@ -295,11 +298,12 @@ defmodule OpEx.MCP.HttpClientTest do
     test "includes Execution-Id header in tool calls when provided" do
       execution_id = "exec-123"
 
-      extra_headers = if execution_id do
-        [{"Execution-Id", execution_id}]
-      else
-        []
-      end
+      extra_headers =
+        if execution_id do
+          [{"Execution-Id", execution_id}]
+        else
+          []
+        end
 
       assert extra_headers == [{"Execution-Id", "exec-123"}]
     end
@@ -307,11 +311,12 @@ defmodule OpEx.MCP.HttpClientTest do
     test "omits Execution-Id header when not provided" do
       execution_id = nil
 
-      extra_headers = if execution_id do
-        [{"Execution-Id", execution_id}]
-      else
-        []
-      end
+      extra_headers =
+        if execution_id do
+          [{"Execution-Id", execution_id}]
+        else
+          []
+        end
 
       assert extra_headers == []
     end

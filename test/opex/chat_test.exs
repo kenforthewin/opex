@@ -20,14 +20,17 @@ defmodule OpEx.ChatTest do
       call_record = {tool_name, args}
       new_state = %{state | calls: [call_record | state.calls]}
 
-      result = case tool_name do
-        "mcp_search" ->
-          {:ok, MCPHelpers.mcp_text_result("Found: #{args["query"]}")}
-        "mcp_error" ->
-          {:error, "Tool execution failed"}
-        _ ->
-          {:error, "Tool not found: #{tool_name}"}
-      end
+      result =
+        case tool_name do
+          "mcp_search" ->
+            {:ok, MCPHelpers.mcp_text_result("Found: #{args["query"]}")}
+
+          "mcp_error" ->
+            {:error, "Tool execution failed"}
+
+          _ ->
+            {:error, "Tool not found: #{tool_name}"}
+        end
 
       {:reply, result, new_state}
     end
@@ -39,9 +42,14 @@ defmodule OpEx.ChatTest do
 
     # Create mock MCP client with tools
     mcp_tools = [
-      MCPHelpers.mcp_tool("mcp_search", "Search tool", %{
-        "query" => %{"type" => "string"}
-      }, ["query"]),
+      MCPHelpers.mcp_tool(
+        "mcp_search",
+        "Search tool",
+        %{
+          "query" => %{"type" => "string"}
+        },
+        ["query"]
+      ),
       MCPHelpers.mcp_tool("mcp_error", "Error tool")
     ]
 
@@ -74,11 +82,12 @@ defmodule OpEx.ChatTest do
     test "accepts hook functions", %{client: client} do
       hook = fn _, ctx -> {:ok, ctx} end
 
-      session = OpEx.Chat.new(client,
-        custom_tool_executor: hook,
-        on_assistant_message: hook,
-        on_tool_result: fn _, _, _, ctx -> {:ok, ctx} end
-      )
+      session =
+        OpEx.Chat.new(client,
+          custom_tool_executor: hook,
+          on_assistant_message: hook,
+          on_tool_result: fn _, _, _, ctx -> {:ok, ctx} end
+        )
 
       assert is_function(session.custom_tool_executor)
       assert is_function(session.on_assistant_message)
@@ -95,11 +104,12 @@ defmodule OpEx.ChatTest do
         {:ok, %{"result" => "from custom"}}
       end
 
-      session = OpEx.Chat.new(client,
-        mcp_clients: [{:ok, mcp_pid}],
-        custom_tools: custom_tools,
-        custom_tool_executor: custom_executor
-      )
+      session =
+        OpEx.Chat.new(client,
+          mcp_clients: [{:ok, mcp_pid}],
+          custom_tools: custom_tools,
+          custom_tool_executor: custom_executor
+        )
 
       # This would need a full chat simulation
       # For now test the executor is called
@@ -113,10 +123,11 @@ defmodule OpEx.ChatTest do
         {:error, :tool_not_found}
       end
 
-      session = OpEx.Chat.new(client,
-        mcp_clients: [{:ok, mcp_pid}],
-        custom_tool_executor: custom_executor
-      )
+      session =
+        OpEx.Chat.new(client,
+          mcp_clients: [{:ok, mcp_pid}],
+          custom_tool_executor: custom_executor
+        )
 
       # The session should have both custom executor and MCP clients
       assert session.custom_tool_executor != nil
@@ -208,9 +219,10 @@ defmodule OpEx.ChatTest do
       session = OpEx.Chat.new(client)
 
       # Error formatting should include tool name
-      error_result = OpEx.MCP.Tools.format_tool_result("call_123", %{
-        "error" => "Tool not available: missing_tool"
-      })
+      error_result =
+        OpEx.MCP.Tools.format_tool_result("call_123", %{
+          "error" => "Tool not available: missing_tool"
+        })
 
       assert error_result["role"] == "tool"
       assert error_result["tool_call_id"] == "call_123"
@@ -225,12 +237,14 @@ defmodule OpEx.ChatTest do
       ]
 
       # Test the normalization logic
-      normalized = Enum.map(messages, fn
-        %{"content" => content} = message when is_list(content) ->
-          %{message | "content" => Enum.join(content, "")}
-        message ->
-          message
-      end)
+      normalized =
+        Enum.map(messages, fn
+          %{"content" => content} = message when is_list(content) ->
+            %{message | "content" => Enum.join(content, "")}
+
+          message ->
+            message
+        end)
 
       assert hd(normalized)["content"] == "Hello world"
     end
@@ -240,12 +254,14 @@ defmodule OpEx.ChatTest do
         %{"role" => "user", "content" => "Hello world"}
       ]
 
-      normalized = Enum.map(messages, fn
-        %{"content" => content} = message when is_list(content) ->
-          %{message | "content" => Enum.join(content, "")}
-        message ->
-          message
-      end)
+      normalized =
+        Enum.map(messages, fn
+          %{"content" => content} = message when is_list(content) ->
+            %{message | "content" => Enum.join(content, "")}
+
+          message ->
+            message
+        end)
 
       assert hd(normalized)["content"] == "Hello world"
     end
@@ -255,12 +271,14 @@ defmodule OpEx.ChatTest do
         %{"role" => "user", "content" => []}
       ]
 
-      normalized = Enum.map(messages, fn
-        %{"content" => content} = message when is_list(content) ->
-          %{message | "content" => Enum.join(content, "")}
-        message ->
-          message
-      end)
+      normalized =
+        Enum.map(messages, fn
+          %{"content" => content} = message when is_list(content) ->
+            %{message | "content" => Enum.join(content, "")}
+
+          message ->
+            message
+        end)
 
       assert hd(normalized)["content"] == ""
     end
@@ -286,11 +304,12 @@ defmodule OpEx.ChatTest do
         end
       end
 
-      session = OpEx.Chat.new(client,
-        mcp_clients: [{:ok, mcp_pid}],
-        custom_tools: custom_tools,
-        custom_tool_executor: custom_executor
-      )
+      session =
+        OpEx.Chat.new(client,
+          mcp_clients: [{:ok, mcp_pid}],
+          custom_tools: custom_tools,
+          custom_tool_executor: custom_executor
+        )
 
       # Execute custom tool
       custom_executor.("mcp_search", %{}, %{})
@@ -320,24 +339,28 @@ defmodule OpEx.ChatTest do
       mcp_clients = [{:ok, mcp_pid}]
 
       # Build tool mapping
-      tool_mapping = Enum.reduce(mcp_clients, %{}, fn
-        {:ok, pid}, acc ->
-          case GenServer.call(pid, :list_tools, 30_000) do
-            {:ok, tools} ->
-              Enum.reduce(tools, acc, fn tool, tool_acc ->
-                tool_name = tool["name"]
-                if tool_name do
-                  Map.put(tool_acc, tool_name, pid)
-                else
-                  tool_acc
-                end
-              end)
-            {:error, _} ->
-              acc
-          end
-        {:error, _}, acc ->
-          acc
-      end)
+      tool_mapping =
+        Enum.reduce(mcp_clients, %{}, fn
+          {:ok, pid}, acc ->
+            case GenServer.call(pid, :list_tools, 30_000) do
+              {:ok, tools} ->
+                Enum.reduce(tools, acc, fn tool, tool_acc ->
+                  tool_name = tool["name"]
+
+                  if tool_name do
+                    Map.put(tool_acc, tool_name, pid)
+                  else
+                    tool_acc
+                  end
+                end)
+
+              {:error, _} ->
+                acc
+            end
+
+          {:error, _}, acc ->
+            acc
+        end)
 
       assert Map.has_key?(tool_mapping, "mcp_search")
       assert Map.has_key?(tool_mapping, "mcp_error")
@@ -347,19 +370,22 @@ defmodule OpEx.ChatTest do
     test "handles failed MCP clients gracefully" do
       mcp_clients = [{:error, "connection failed"}]
 
-      tool_mapping = Enum.reduce(mcp_clients, %{}, fn
-        {:ok, pid}, acc ->
-          case GenServer.call(pid, :list_tools, 30_000) do
-            {:ok, tools} ->
-              Enum.reduce(tools, acc, fn tool, tool_acc ->
-                Map.put(tool_acc, tool["name"], pid)
-              end)
-            {:error, _} ->
-              acc
-          end
-        {:error, _}, acc ->
-          acc
-      end)
+      tool_mapping =
+        Enum.reduce(mcp_clients, %{}, fn
+          {:ok, pid}, acc ->
+            case GenServer.call(pid, :list_tools, 30_000) do
+              {:ok, tools} ->
+                Enum.reduce(tools, acc, fn tool, tool_acc ->
+                  Map.put(tool_acc, tool["name"], pid)
+                end)
+
+              {:error, _} ->
+                acc
+            end
+
+          {:error, _}, acc ->
+            acc
+        end)
 
       assert tool_mapping == %{}
     end

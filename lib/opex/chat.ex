@@ -78,11 +78,12 @@ defmodule OpEx.Chat do
     normalized_messages = normalize_message_content(messages)
 
     # Build full message list with system prompt if provided
-    full_messages = if system_prompt != "" do
-      [%{"role" => "system", "content" => system_prompt} | normalized_messages]
-    else
-      normalized_messages
-    end
+    full_messages =
+      if system_prompt != "" do
+        [%{"role" => "system", "content" => system_prompt} | normalized_messages]
+      else
+        normalized_messages
+      end
 
     available_tools = get_all_tools(session)
 
@@ -92,18 +93,20 @@ defmodule OpEx.Chat do
     }
 
     # Add temperature if provided
-    body = if temperature do
-      Map.put(body, :temperature, temperature)
-    else
-      body
-    end
+    body =
+      if temperature do
+        Map.put(body, :temperature, temperature)
+      else
+        body
+      end
 
     # Only include tools if we have any
-    body = if available_tools != [] do
-      Map.put(body, :tools, available_tools)
-    else
-      body
-    end
+    body =
+      if available_tools != [] do
+        Map.put(body, :tools, available_tools)
+      else
+        body
+      end
 
     Logger.info("Starting chat request to model: #{model}")
 
@@ -122,17 +125,16 @@ defmodule OpEx.Chat do
           # Execute tools if present (on_tool_result will update existing DB records)
           case handle_tool_calls(session, message, context) do
             {:ok, updated_messages, updated_context} ->
-
               # Continue conversation with tool results
               case continue_chat_recursive(
-                session,
-                full_messages ++ updated_messages,
-                available_tools,
-                [],
-                model,
-                updated_context,
-                temperature
-              ) do
+                     session,
+                     full_messages ++ updated_messages,
+                     available_tools,
+                     [],
+                     model,
+                     updated_context,
+                     temperature
+                   ) do
                 {:ok, final_response, all_tool_calls} ->
                   # Add metadata about all tool calls
                   initial_tool_calls = Map.get(message, "tool_calls", [])
@@ -201,6 +203,7 @@ defmodule OpEx.Chat do
           {:ok, tools} ->
             Enum.reduce(tools, acc, fn tool, tool_acc ->
               tool_name = tool["name"]
+
               if tool_name do
                 Map.put(tool_acc, tool_name, pid)
               else
@@ -223,36 +226,43 @@ defmodule OpEx.Chat do
         case OpEx.MCP.Tools.extract_tool_call(tool_call) do
           {:ok, tool_name, args} ->
             # Check if tool exists
-            is_custom_tool = Enum.any?(session.custom_tools, fn tool ->
-              get_in(tool, ["function", "name"]) == tool_name
-            end)
+            is_custom_tool =
+              Enum.any?(session.custom_tools, fn tool ->
+                get_in(tool, ["function", "name"]) == tool_name
+              end)
+
             is_mcp_tool = Map.has_key?(session.tool_mapping, tool_name)
 
             if is_custom_tool || is_mcp_tool do
               # Try custom tool first, then MCP tool
-              {result, new_context} = case execute_custom_tool(session, tool_name, args, acc_context) do
-                {:ok, result} ->
-                  {result, acc_context}
+              {result, new_context} =
+                case execute_custom_tool(session, tool_name, args, acc_context) do
+                  {:ok, result} ->
+                    {result, acc_context}
 
-                {:error, :tool_not_found} ->
-                  case execute_mcp_tool(session, tool_name, args) do
-                    {:ok, result} ->
-                      {result, acc_context}
+                  {:error, :tool_not_found} ->
+                    case execute_mcp_tool(session, tool_name, args) do
+                      {:ok, result} ->
+                        {result, acc_context}
 
-                    {:error, reason} ->
-                      {%{"error" => reason}, acc_context}
-                  end
-              end
+                      {:error, reason} ->
+                        {%{"error" => reason}, acc_context}
+                    end
+                end
 
               # Call on_tool_result hook
-              new_context = call_hook(session.on_tool_result, [tool_call["id"], tool_name, result, new_context], new_context)
+              new_context =
+                call_hook(session.on_tool_result, [tool_call["id"], tool_name, result, new_context], new_context)
 
               formatted_result = OpEx.MCP.Tools.format_tool_result(tool_call["id"], result)
               {formatted_result, new_context}
             else
               # Tool not found
               Logger.warning("Tool '#{tool_name}' not found in available tools")
-              error_result = OpEx.MCP.Tools.format_tool_result(tool_call["id"], %{"error" => "Tool not available: #{tool_name}"})
+
+              error_result =
+                OpEx.MCP.Tools.format_tool_result(tool_call["id"], %{"error" => "Tool not available: #{tool_name}"})
+
               {error_result, acc_context}
             end
 
@@ -264,11 +274,12 @@ defmodule OpEx.Chat do
       end)
 
     # Normalize tool_calls to ensure arguments field is always present
-    normalized_tool_calls = Enum.map(tool_calls, fn tool_call ->
-      function = tool_call["function"]
-      normalized_function = Map.put_new(function, "arguments", "{}")
-      Map.put(tool_call, "function", normalized_function)
-    end)
+    normalized_tool_calls =
+      Enum.map(tool_calls, fn tool_call ->
+        function = tool_call["function"]
+        normalized_function = Map.put_new(function, "arguments", "{}")
+        Map.put(tool_call, "function", normalized_function)
+      end)
 
     assistant_message = %{
       "role" => "assistant",
@@ -300,24 +311,34 @@ defmodule OpEx.Chat do
     end
   end
 
-  defp continue_chat_recursive(%__MODULE__{} = session, messages, tools, accumulated_tool_calls, model, context, temperature \\ nil) do
+  defp continue_chat_recursive(
+         %__MODULE__{} = session,
+         messages,
+         tools,
+         accumulated_tool_calls,
+         model,
+         context,
+         temperature
+       ) do
     body = %{
       messages: messages,
       model: model
     }
 
     # Add temperature if provided
-    body = if temperature do
-      Map.put(body, :temperature, temperature)
-    else
-      body
-    end
+    body =
+      if temperature do
+        Map.put(body, :temperature, temperature)
+      else
+        body
+      end
 
-    body = if tools != [] do
-      Map.put(body, :tools, tools)
-    else
-      body
-    end
+    body =
+      if tools != [] do
+        Map.put(body, :tools, tools)
+      else
+        body
+      end
 
     case OpEx.Client.chat_completion(session.client, body) do
       {:ok, %{"choices" => [%{"message" => message}]} = response} ->
@@ -351,6 +372,7 @@ defmodule OpEx.Chat do
   end
 
   defp call_hook(nil, _args, default_context), do: default_context
+
   defp call_hook(hook, args, default_context) when is_function(hook) do
     case apply(hook, args) do
       :ok -> default_context

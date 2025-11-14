@@ -63,16 +63,17 @@ defmodule OpEx.ClientTest do
         end
       end
 
-      _log = capture_log(fn ->
-        result = test_retry_logic_with_mock_sleep(retry_fun)
+      _log =
+        capture_log(fn ->
+          result = test_retry_logic_with_mock_sleep(retry_fun)
 
-        # Should succeed after retries
-        assert {:ok, response} = result
-        assert get_in(response, ["choices", Access.at(0), "message", "content"]) == "Success after retries"
+          # Should succeed after retries
+          assert {:ok, response} = result
+          assert get_in(response, ["choices", Access.at(0), "message", "content"]) == "Success after retries"
 
-        # Should have retried 2 times (3 total attempts)
-        assert :persistent_term.get(attempt) == 3
-      end)
+          # Should have retried 2 times (3 total attempts)
+          assert :persistent_term.get(attempt) == 3
+        end)
 
       # Clean up
       :persistent_term.erase(attempt)
@@ -176,7 +177,8 @@ defmodule OpEx.ClientTest do
       # We'll test the logic directly
       result = check_embedded_error(embedded_error)
 
-      assert {:error, %{status: 429}} = result  # 502 should convert to 429
+      # 502 should convert to 429
+      assert {:error, %{status: 429}} = result
     end
 
     test "converts 502 to 429 for rate limit handling" do
@@ -219,12 +221,13 @@ defmodule OpEx.ClientTest do
       }
 
       # Test the formatting logic would handle this correctly
-      models = Enum.map(mock_response["data"], fn model ->
-        %{
-          id: model["id"],
-          name: model["name"] || model["id"]
-        }
-      end)
+      models =
+        Enum.map(mock_response["data"], fn model ->
+          %{
+            id: model["id"],
+            name: model["name"] || model["id"]
+          }
+        end)
 
       assert length(models) == 2
       assert Enum.at(models, 0).id == "anthropic/claude-3.5-sonnet"
@@ -281,10 +284,11 @@ defmodule OpEx.ClientTest do
     error_code = get_in(error_info, ["code"])
     error_message = get_in(error_info, ["message"])
 
-    final_status = case error_code do
-      502 -> 429
-      code -> code
-    end
+    final_status =
+      case error_code do
+        502 -> 429
+        code -> code
+      end
 
     {:error, %{status: final_status, body: %{error: %{message: error_message}}}}
   end

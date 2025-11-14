@@ -25,6 +25,7 @@ defmodule OpEx.MCP.SessionManagerTest do
       case state.behavior do
         :fail_connect ->
           {:reply, {:error, "Connection failed"}, state}
+
         _ ->
           {:reply, :ok, %{state | connected: true}}
       end
@@ -34,6 +35,7 @@ defmodule OpEx.MCP.SessionManagerTest do
       case state.behavior do
         :fail_list_tools ->
           {:reply, {:error, "Failed to list tools"}, state}
+
         _ ->
           {:reply, {:ok, state.tools}, state}
       end
@@ -267,6 +269,7 @@ defmodule OpEx.MCP.SessionManagerTest do
   defp generate_test_id(config) do
     # Simulate ID generation from config
     config_string = Jason.encode!(config)
+
     :crypto.hash(:sha256, config_string)
     |> Base.encode16(case: :lower)
     |> String.slice(0, 8)
