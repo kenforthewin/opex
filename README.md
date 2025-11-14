@@ -155,7 +155,7 @@ client = OpEx.Client.new(api_key,
 
 ```elixir
 OpEx.Chat.chat(session,
-  model: "anthropic/claude-3.5-sonnet",  # Required
+  model: "anthropic/claude-haiku-4.5",  # Required
   messages: messages,                     # Required
   system_prompt: "You are helpful",       # Optional
   execute_tools: true,                    # Auto-execute tools (default: true)
