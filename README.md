@@ -1,5 +1,7 @@
 # OpEx
 
+![Hex.pm Version](https://img.shields.io/hexpm/v/opex)
+
 An agentic LLM toolkit for Elixir.
 
 ## Overview
