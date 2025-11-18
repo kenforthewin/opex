@@ -80,9 +80,6 @@ defmodule OpEx.Client do
   * `{:error, reason}` - Error response
   """
   def chat_completion(%__MODULE__{} = client, body) do
-    # Inject default parameters
-    body = inject_default_parameters(body)
-
     retry_on_transient_error(fn ->
       case request(client, :post, "/chat/completions", json: body) do
         {:ok, response_body} ->
@@ -117,12 +114,6 @@ defmodule OpEx.Client do
       {:error, error} ->
         {:error, error}
     end
-  end
-
-  defp inject_default_parameters(body) do
-    # Don't inject parallel_tool_calls as it's not universally supported
-    # (e.g., Amazon Bedrock doesn't accept this parameter)
-    body
   end
 
   defp check_for_embedded_errors(%{"choices" => [%{"error" => error_info} | _]}) do

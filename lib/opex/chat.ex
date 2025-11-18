@@ -65,6 +65,7 @@ defmodule OpEx.Chat do
   * `:execute_tools` - Whether to execute tools automatically (default: true)
   * `:context` - Arbitrary context passed to hooks (default: %{})
   * `:temperature` - Controls randomness (0.0-2.0, optional, defaults to API default of 1.0)
+  * `:parallel_tool_calls` - Whether to allow parallel tool calls (boolean, optional)
   """
   def chat(%__MODULE__{} = session, opts) do
     model = Keyword.fetch!(opts, :model)
@@ -73,6 +74,7 @@ defmodule OpEx.Chat do
     execute_tools = Keyword.get(opts, :execute_tools, true)
     context = Keyword.get(opts, :context, %{})
     temperature = Keyword.get(opts, :temperature)
+    parallel_tool_calls = Keyword.get(opts, :parallel_tool_calls)
 
     # Normalize messages
     normalized_messages = normalize_message_content(messages)
@@ -96,6 +98,14 @@ defmodule OpEx.Chat do
     body =
       if temperature do
         Map.put(body, :temperature, temperature)
+      else
+        body
+      end
+
+    # Add parallel_tool_calls if provided
+    body =
+      if parallel_tool_calls != nil do
+        Map.put(body, :parallel_tool_calls, parallel_tool_calls)
       else
         body
       end
@@ -133,7 +143,8 @@ defmodule OpEx.Chat do
                      [],
                      model,
                      updated_context,
-                     temperature
+                     temperature,
+                     parallel_tool_calls
                    ) do
                 {:ok, final_response, all_tool_calls} ->
                   # Add metadata about all tool calls
@@ -318,7 +329,8 @@ defmodule OpEx.Chat do
          accumulated_tool_calls,
          model,
          context,
-         temperature
+         temperature,
+         parallel_tool_calls
        ) do
     body = %{
       messages: messages,
@@ -329,6 +341,14 @@ defmodule OpEx.Chat do
     body =
       if temperature do
         Map.put(body, :temperature, temperature)
+      else
+        body
+      end
+
+    # Add parallel_tool_calls if provided
+    body =
+      if parallel_tool_calls != nil do
+        Map.put(body, :parallel_tool_calls, parallel_tool_calls)
       else
         body
       end
@@ -357,7 +377,8 @@ defmodule OpEx.Chat do
               accumulated_tool_calls ++ new_tool_calls,
               model,
               new_context,
-              temperature
+              temperature,
+              parallel_tool_calls
             )
 
           :no_tool_calls ->

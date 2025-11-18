@@ -256,10 +256,11 @@ defmodule IntegrationDemo do
     context = %{demo_run: true, start_time: System.monotonic_time(:millisecond)}
 
     case OpEx.Chat.chat(session,
-      model: "moonshotai/kimi-k2-thinking",
+      model: "anthropic/claude-haiku-4.5",
       messages: [%{"role" => "user", "content" => user_prompt}],
       system_prompt: "You are a helpful assistant with access to file operations, calculations, and system information. Use the available tools to complete user requests.",
-      context: context
+      context: context,
+      parallel_tool_calls: true
     ) do
       {:ok, response} ->
         elapsed = System.monotonic_time(:millisecond) - context.start_time
