@@ -98,18 +98,39 @@ defmodule OpEx.MCP.Tools do
 
   @doc """
   Formats MCP tool result for OpenAI tool response.
+
+  Handles multiple MCP result formats:
+  - Standard MCP format: `%{"content" => [%{"type" => "text", "text" => "..."}]}`
+  - Direct content array: `[%{"type" => "text", "text" => "..."}]` (some MCP servers)
+  - Direct string: `%{"content" => "string"}`
+  - Other formats: JSON-encoded
   """
   def format_tool_result(tool_call_id, mcp_result) do
     content =
       case mcp_result do
+        # Standard MCP format with content key containing array
         %{"content" => content} when is_list(content) ->
           content
           |> Enum.map(&extract_content_text/1)
           |> Enum.join("\n")
 
+        # Standard MCP format with content key containing string
         %{"content" => content} when is_binary(content) ->
           content
 
+        # Direct content array (some MCP servers return this format)
+        content_array when is_list(content_array) ->
+          # Check if this looks like an MCP content array
+          if mcp_content_array?(content_array) do
+            content_array
+            |> Enum.map(&extract_content_text/1)
+            |> Enum.join("\n")
+          else
+            # Not an MCP content array, JSON encode it
+            Jason.encode!(content_array)
+          end
+
+        # Other formats: JSON encode
         other ->
           Jason.encode!(other)
       end
@@ -121,8 +142,19 @@ defmodule OpEx.MCP.Tools do
     }
   end
 
+  # Check if a list looks like an MCP content array
+  defp mcp_content_array?([]), do: false
+  defp mcp_content_array?([%{"type" => _} | _]), do: true
+  defp mcp_content_array?([%{"text" => _} | _]), do: true
+  defp mcp_content_array?([%{type: _} | _]), do: true
+  defp mcp_content_array?([%{text: _} | _]), do: true
+  defp mcp_content_array?(_), do: false
+
+  # Extract text from MCP content items, handling both string and atom keys
   defp extract_content_text(%{"type" => "text", "text" => text}), do: text
   defp extract_content_text(%{"text" => text}), do: text
+  defp extract_content_text(%{type: "text", text: text}), do: text
+  defp extract_content_text(%{text: text}), do: text
   defp extract_content_text(content) when is_binary(content), do: content
   defp extract_content_text(content), do: Jason.encode!(content)
 
