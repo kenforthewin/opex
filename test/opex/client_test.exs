@@ -205,6 +205,40 @@ defmodule OpEx.ClientTest do
 
       assert :ok = result
     end
+
+    test "detects top-level error and converts to retryable format" do
+      # Provider error like the one reported: code 524
+      top_level_error = %{
+        "error" => %{
+          "code" => 524,
+          "message" => "Provider returned error",
+          "metadata" => %{
+            "provider_name" => "Google",
+            "raw" => "error code: 524"
+          }
+        },
+        "user_id" => "user_123"
+      }
+
+      result = check_embedded_error(top_level_error)
+
+      assert {:error, %{status: 524, body: body}} = result
+      assert body.error.message == "Provider returned error"
+    end
+
+    test "converts top-level 502 to 429 for rate limit handling" do
+      top_level_502 = %{
+        "error" => %{
+          "code" => 502,
+          "message" => "Rate limit from provider"
+        }
+      }
+
+      result = check_embedded_error(top_level_502)
+
+      assert {:error, %{status: 429, body: body}} = result
+      assert body.error.message == "Rate limit from provider"
+    end
   end
 
   describe "get_models/1" do
@@ -281,6 +315,20 @@ defmodule OpEx.ClientTest do
   end
 
   defp check_embedded_error(%{"choices" => [%{"error" => error_info} | _]}) do
+    error_code = get_in(error_info, ["code"])
+    error_message = get_in(error_info, ["message"])
+
+    final_status =
+      case error_code do
+        502 -> 429
+        code -> code
+      end
+
+    {:error, %{status: final_status, body: %{error: %{message: error_message}}}}
+  end
+
+  defp check_embedded_error(%{"error" => error_info}) do
+    # Handle top-level error responses (e.g., provider errors)
     error_code = get_in(error_info, ["code"])
     error_message = get_in(error_info, ["message"])
 

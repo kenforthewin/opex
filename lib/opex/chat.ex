@@ -20,7 +20,8 @@ defmodule OpEx.Chat do
     :tool_mapping,
     :custom_tool_executor,
     :on_assistant_message,
-    :on_tool_result
+    :on_tool_result,
+    :tool_result_role
   ]
 
   @doc """
@@ -32,13 +33,17 @@ defmodule OpEx.Chat do
   * `:custom_tools` - List of custom tool definitions in OpenAI format
   * `:rejected_tools` - List of tool names to exclude from MCP tools
   * `:custom_tool_executor` - Function `(tool_name, args, context) -> {:ok, result} | {:error, reason}`
-  * `:on_assistant_message` - Hook `(message, context) -> :ok | {:ok, context}`
-  * `:on_tool_result` - Hook `(tool_call_id, tool_name, result, context) -> :ok | {:ok, context}`
+  * `:on_assistant_message` - Hook `(message, context) -> :ok | {:ok, context} | :stop | {:stop, context}`
+  * `:on_tool_result` - Hook `(tool_call_id, tool_name, result, context) -> :ok | {:ok, context} | :stop | {:stop, context}`.
+    When this hook returns `:stop` or `{:stop, context}`, the tool execution loop stops immediately and no further
+    LLM calls are made. The response will include `_metadata.stopped_by_hook = true`.
+  * `:tool_result_role` - Role to use for tool result messages (default: "tool", can be "user" for MCP compatibility)
   """
   def new(client, opts \\ []) do
     mcp_clients = Keyword.get(opts, :mcp_clients, [])
     custom_tools = Keyword.get(opts, :custom_tools, [])
     rejected_tools = Keyword.get(opts, :rejected_tools, [])
+    tool_result_role = Keyword.get(opts, :tool_result_role, "tool")
 
     tool_mapping = build_tool_mapping(mcp_clients)
 
@@ -50,7 +55,8 @@ defmodule OpEx.Chat do
       tool_mapping: tool_mapping,
       custom_tool_executor: Keyword.get(opts, :custom_tool_executor),
       on_assistant_message: Keyword.get(opts, :on_assistant_message),
-      on_tool_result: Keyword.get(opts, :on_tool_result)
+      on_tool_result: Keyword.get(opts, :on_tool_result),
+      tool_result_role: tool_result_role
     }
   end
 
@@ -130,7 +136,7 @@ defmodule OpEx.Chat do
           {:ok, response}
         else
           # Call on_assistant_message hook FIRST to create DB records
-          context = call_hook(session.on_assistant_message, [message, context], context)
+          {_hook_status, context} = call_hook(session.on_assistant_message, [message, context], context)
 
           # Execute tools if present (on_tool_result will update existing DB records)
           case handle_tool_calls(session, message, context) do
@@ -156,6 +162,17 @@ defmodule OpEx.Chat do
                 error ->
                   error
               end
+
+            {:stop, updated_messages, _updated_context} ->
+              # Hook requested stop - return current response without continuing
+              Logger.info("Tool execution stopped by on_tool_result hook")
+              # Build final message with the tool results we've collected so far
+              final_message = List.last(updated_messages) || message
+              final_response = %{
+                "choices" => [%{"message" => final_message}],
+                "_metadata" => %{"stopped_by_hook" => true, "tool_calls_made" => Map.get(message, "tool_calls", [])}
+              }
+              {:ok, final_response}
 
             :no_tool_calls ->
               # No tool calls, return response immediately
@@ -232,8 +249,8 @@ defmodule OpEx.Chat do
   end
 
   defp handle_tool_calls(%__MODULE__{} = session, %{"tool_calls" => tool_calls} = message, context) do
-    {tool_results, final_context} =
-      Enum.map_reduce(tool_calls, context, fn tool_call, acc_context ->
+    result =
+      Enum.reduce_while(tool_calls, {:cont, [], context}, fn tool_call, {:cont, acc_results, acc_context} ->
         case OpEx.MCP.Tools.extract_tool_call(tool_call) do
           {:ok, tool_name, args} ->
             # Check if tool exists
@@ -262,27 +279,39 @@ defmodule OpEx.Chat do
                 end
 
               # Call on_tool_result hook
-              new_context =
-                call_hook(session.on_tool_result, [tool_call["id"], tool_name, result, new_context], new_context)
+              case call_hook(session.on_tool_result, [tool_call["id"], tool_name, result, new_context], new_context) do
+                {:stop, final_context} ->
+                  # Hook requested stop - format current result and halt
+                  formatted_result = OpEx.MCP.Tools.format_tool_result(tool_call["id"], result, session.tool_result_role)
+                  {:halt, {:stop, acc_results ++ [formatted_result], final_context}}
 
-              formatted_result = OpEx.MCP.Tools.format_tool_result(tool_call["id"], result)
-              {formatted_result, new_context}
+                {:continue, updated_context} ->
+                  # Continue processing
+                  formatted_result = OpEx.MCP.Tools.format_tool_result(tool_call["id"], result, session.tool_result_role)
+                  {:cont, {:cont, acc_results ++ [formatted_result], updated_context}}
+              end
             else
               # Tool not found
               Logger.warning("Tool '#{tool_name}' not found in available tools")
 
               error_result =
-                OpEx.MCP.Tools.format_tool_result(tool_call["id"], %{"error" => "Tool not available: #{tool_name}"})
+                OpEx.MCP.Tools.format_tool_result(tool_call["id"], %{"error" => "Tool not available: #{tool_name}"}, session.tool_result_role)
 
-              {error_result, acc_context}
+              {:cont, {:cont, acc_results ++ [error_result], acc_context}}
             end
 
           {:error, reason} ->
             Logger.error("Tool execution failed: #{inspect(reason)}")
-            error_result = OpEx.MCP.Tools.format_tool_result(tool_call["id"], %{"error" => reason})
-            {error_result, acc_context}
+            error_result = OpEx.MCP.Tools.format_tool_result(tool_call["id"], %{"error" => reason}, session.tool_result_role)
+            {:cont, {:cont, acc_results ++ [error_result], acc_context}}
         end
       end)
+
+    {status, tool_results, final_context} =
+      case result do
+        {:cont, results, ctx} -> {:ok, results, ctx}
+        {:stop, results, ctx} -> {:stop, results, ctx}
+      end
 
     # Normalize tool_calls to ensure arguments field is always present
     normalized_tool_calls =
@@ -298,7 +327,7 @@ defmodule OpEx.Chat do
       "tool_calls" => normalized_tool_calls
     }
 
-    {:ok, [assistant_message | tool_results], final_context}
+    {status, [assistant_message | tool_results], final_context}
   end
 
   defp handle_tool_calls(_session, _message, _context), do: :no_tool_calls
@@ -363,7 +392,7 @@ defmodule OpEx.Chat do
     case OpEx.Client.chat_completion(session.client, body) do
       {:ok, %{"choices" => [%{"message" => message}]} = response} ->
         # Call on_assistant_message hook FIRST to create DB records
-        context = call_hook(session.on_assistant_message, [message, context], context)
+        {_hook_status, context} = call_hook(session.on_assistant_message, [message, context], context)
 
         case handle_tool_calls(session, message, context) do
           {:ok, new_tool_messages, new_context} ->
@@ -381,6 +410,19 @@ defmodule OpEx.Chat do
               parallel_tool_calls
             )
 
+          {:stop, _new_tool_messages, _new_context} ->
+            # Hook requested stop during recursive call
+            Logger.info("Tool execution stopped by on_tool_result hook in recursive call")
+            new_tool_calls = Map.get(message, "tool_calls", [])
+            all_calls = accumulated_tool_calls ++ new_tool_calls
+
+            # Return the current response with stop metadata
+            final_response = Map.put(response, "_metadata", %{
+              "stopped_by_hook" => true,
+              "tool_calls_made" => all_calls
+            })
+            {:ok, final_response, all_calls}
+
           :no_tool_calls ->
             # No more tool calls, this is the final response
             call_hook(session.on_assistant_message, [message, context], context)
@@ -392,13 +434,15 @@ defmodule OpEx.Chat do
     end
   end
 
-  defp call_hook(nil, _args, default_context), do: default_context
+  defp call_hook(nil, _args, default_context), do: {:continue, default_context}
 
   defp call_hook(hook, args, default_context) when is_function(hook) do
     case apply(hook, args) do
-      :ok -> default_context
-      {:ok, new_context} -> new_context
-      _ -> default_context
+      :ok -> {:continue, default_context}
+      {:ok, new_context} -> {:continue, new_context}
+      :stop -> {:stop, default_context}
+      {:stop, new_context} -> {:stop, new_context}
+      _ -> {:continue, default_context}
     end
   end
 end

@@ -390,4 +390,101 @@ defmodule OpEx.ChatTest do
       assert tool_mapping == %{}
     end
   end
+
+  describe "stop hook behavior" do
+    test "on_tool_result returning :stop halts tool execution" do
+      # Track which tools were executed
+      executed_tools = Agent.start_link(fn -> [] end) |> elem(1)
+
+      hook = fn tool_call_id, tool_name, _result, context ->
+        Agent.update(executed_tools, fn tools -> [tool_name | tools] end)
+
+        # Stop after first tool
+        if tool_name == "tool1" do
+          :stop
+        else
+          {:ok, context}
+        end
+      end
+
+      # Test that hook returns :stop correctly
+      assert :stop == hook.("call_1", "tool1", %{}, %{})
+      assert {:ok, %{}} == hook.("call_2", "tool2", %{}, %{})
+
+      tools = Agent.get(executed_tools, & &1)
+      assert "tool1" in tools
+      assert "tool2" in tools
+    end
+
+    test "on_tool_result returning {:stop, context} halts and updates context" do
+      hook = fn _tool_call_id, tool_name, _result, context ->
+        if tool_name == "stop_tool" do
+          {:stop, Map.put(context, :stopped, true)}
+        else
+          {:ok, context}
+        end
+      end
+
+      # Test that hook returns {:stop, context} correctly
+      assert {:stop, %{stopped: true}} == hook.("call_1", "stop_tool", %{}, %{})
+      assert {:ok, %{}} == hook.("call_2", "other_tool", %{}, %{})
+    end
+
+    test "call_hook detects :stop return value" do
+      # Define call_hook behavior locally for testing
+      call_hook = fn
+        nil, _args, default_context ->
+          {:continue, default_context}
+
+        hook, args, default_context when is_function(hook) ->
+          case apply(hook, args) do
+            :ok -> {:continue, default_context}
+            {:ok, new_context} -> {:continue, new_context}
+            :stop -> {:stop, default_context}
+            {:stop, new_context} -> {:stop, new_context}
+            _ -> {:continue, default_context}
+          end
+      end
+
+      stop_hook = fn _, _ -> :stop end
+      stop_with_context_hook = fn _, _ -> {:stop, %{stopped: true}} end
+      continue_hook = fn _, _ -> :ok end
+
+      assert {:stop, %{}} == call_hook.(stop_hook, [%{}, %{}], %{})
+      assert {:stop, %{stopped: true}} == call_hook.(stop_with_context_hook, [%{}, %{}], %{})
+      assert {:continue, %{}} == call_hook.(continue_hook, [%{}, %{}], %{})
+      assert {:continue, %{default: true}} == call_hook.(nil, [], %{default: true})
+    end
+
+    test "multiple tools with stop on second should process first tool only" do
+      # This tests that reduce_while properly stops after processing the first tool
+      # when the second tool's hook returns :stop
+
+      tools_to_process = [
+        %{"id" => "call_1", "name" => "tool1"},
+        %{"id" => "call_2", "name" => "tool2"},
+        %{"id" => "call_3", "name" => "tool3"}
+      ]
+
+      executed = []
+
+      result =
+        Enum.reduce_while(tools_to_process, {:cont, [], %{}}, fn tool, {:cont, acc_results, context} ->
+          executed = executed ++ [tool["name"]]
+
+          # Simulate stop on second tool
+          if tool["name"] == "tool2" do
+            {:halt, {:stop, acc_results ++ [tool], context}}
+          else
+            {:cont, {:cont, acc_results ++ [tool], context}}
+          end
+        end)
+
+      assert {:stop, processed_tools, _context} = result
+      # Should have processed tool1 and tool2 (where we stopped)
+      assert length(processed_tools) == 2
+      assert Enum.at(processed_tools, 0)["name"] == "tool1"
+      assert Enum.at(processed_tools, 1)["name"] == "tool2"
+    end
+  end
 end

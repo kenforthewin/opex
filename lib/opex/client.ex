@@ -133,6 +133,23 @@ defmodule OpEx.Client do
     {:error, %{status: final_status, body: %{error: %{message: error_message}}}}
   end
 
+  defp check_for_embedded_errors(%{"error" => error_info}) do
+    # Handle top-level error responses (e.g., provider errors)
+    error_code = get_in(error_info, ["code"])
+    error_message = get_in(error_info, ["message"])
+
+    # Handle specific error code mappings for rate limits
+    final_status =
+      case error_code do
+        # Rate limit from OpenAI reported as 502, treat as 429
+        502 -> 429
+        code -> code
+      end
+
+    # Convert to the format expected by retry logic
+    {:error, %{status: final_status, body: %{error: %{message: error_message}}}}
+  end
+
   defp check_for_embedded_errors(_response), do: :ok
 
   defp retry_on_transient_error(fun, attempt \\ 1, max_retries \\ 3) do

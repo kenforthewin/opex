@@ -104,8 +104,14 @@ defmodule OpEx.MCP.Tools do
   - Direct content array: `[%{"type" => "text", "text" => "..."}]` (some MCP servers)
   - Direct string: `%{"content" => "string"}`
   - Other formats: JSON-encoded
+
+  ## Parameters
+
+  * `tool_call_id` - The ID of the tool call this result is for
+  * `mcp_result` - The result from the MCP tool execution
+  * `role` - The role to use for the message (default: "tool", can be "user" for MCP compatibility)
   """
-  def format_tool_result(tool_call_id, mcp_result) do
+  def format_tool_result(tool_call_id, mcp_result, role \\ "tool") do
     content =
       case mcp_result do
         # Standard MCP format with content key containing array
@@ -135,11 +141,17 @@ defmodule OpEx.MCP.Tools do
           Jason.encode!(other)
       end
 
-    %{
-      "role" => "tool",
-      "tool_call_id" => tool_call_id,
+    message = %{
+      "role" => role,
       "content" => content
     }
+
+    # Include tool_call_id only for "tool" role (OpenAI format)
+    if role == "tool" do
+      Map.put(message, "tool_call_id", tool_call_id)
+    else
+      message
+    end
   end
 
   # Check if a list looks like an MCP content array

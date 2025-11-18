@@ -102,10 +102,16 @@ OpEx uses a hooks-based architecture to avoid coupling. All hooks are optional f
 
 **Hook Signatures**:
 - `custom_tool_executor: (tool_name, args, context) -> {:ok, result} | {:error, reason}`
-- `on_assistant_message: (message, context) -> :ok | {:ok, updated_context}`
-- `on_tool_result: (tool_call_id, tool_name, result, context) -> :ok | {:ok, updated_context}`
+- `on_assistant_message: (message, context) -> :ok | {:ok, updated_context} | :stop | {:stop, updated_context}`
+- `on_tool_result: (tool_call_id, tool_name, result, context) -> :ok | {:ok, updated_context} | :stop | {:stop, updated_context}`
 
 **Context Threading**: Context is arbitrary data (typically `%{conversation_id: ...}`) passed through all hooks. Hooks can return `{:ok, new_context}` to update it for subsequent hooks.
+
+**Stopping Tool Execution**: The `on_tool_result` hook can return `:stop` or `{:stop, context}` to immediately halt the tool execution loop. When this happens:
+- No further tools in the current batch are executed
+- No additional LLM calls are made
+- The response includes `_metadata.stopped_by_hook = true`
+- Useful for implementing rate limits, cost controls, or error handling
 
 ### Tool Mapping and Routing
 
